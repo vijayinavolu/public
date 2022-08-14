@@ -1,0 +1,65 @@
+module openconfig-ipsec-ike {
+
+  yang-version "1";
+
+  // namespace
+  namespace "http://openconfig.net/yang/ipsec";
+
+  prefix "oc-ipsec";
+
+  // import some basic types
+  //import ietf-interfaces { prefix ietf-if; }
+  import openconfig-yang-types { prefix oc-yang; }
+  import openconfig-types { prefix oc-types; }
+  import openconfig-extensions { prefix oc-ext; }
+
+  // Include the common cross-AFT entities.
+  include openconfig-ipsec-common;
+
+  // meta
+  organization "OpenConfig working group";
+
+  contact
+    "OpenConfig working group
+    netopenconfig@googlegroups.com";
+
+  description
+    "Model for managing network interfaces and subinterfaces.  This
+    module also defines convenience types / groupings for other
+    models to create references to interfaces:
+
+      base-interface-ref (type) -  reference to a base interface
+      interface-ref (grouping) -  container for reference to a
+        interface + subinterface
+      interface-ref-state (grouping) - container for read-only
+        (opstate) reference to interface + subinterface
+
+    This model reuses data items defined in the IETF YANG model for
+    interfaces described by RFC 7223 with an alternate structure
+    (particularly for operational state data) and with
+    additional configuration items.
+
+    Portions of this code were derived from IETF RFC 7223.
+    Please reproduce this note if possible.
+
+    IETF code is subject to the following copyright and license:
+    Copyright (c) IETF Trust and the persons identified as authors of
+    the code.
+    All rights reserved.
+
+    Redistribution and use in source and binary forms, with or without
+    modification, is permitted pursuant to, and subject to the license
+    terms contained in, the Simplified BSD License set forth in
+    Section 4.c of the IETF Trust's Legal Provisions Relating
+    to IETF Documents (http://trustee.ietf.org/license-info).";
+
+
+  revision "2022-08-05" {
+    description
+      "Intial Version";
+    reference "1.1.0";
+  }
+
+
+
+}

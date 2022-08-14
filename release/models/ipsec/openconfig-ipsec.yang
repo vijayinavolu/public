@@ -1,0 +1,408 @@
+module openconfig-ipsec {
+
+  yang-version "1";
+
+  // namespace
+  namespace "http://openconfig.net/yang/ipsec";
+
+  prefix "oc-ipsec";
+
+  // import some basic types
+ // import ietf-interfaces { prefix ietf-if; } //TODO: no deps, remove it
+  import openconfig-yang-types { prefix oc-yang; }
+  import openconfig-types { prefix oc-types; }
+  import openconfig-extensions { prefix oc-ext; }
+  import openconfig-inet-types { prefix oc-inet; }
+  
+  // Include the common cross-AFT entities.
+  include openconfig-ipsec-common;
+
+  // meta
+  organization "OpenConfig working group";
+
+  contact
+    "OpenConfig working group
+    netopenconfig@googlegroups.com";
+
+  description
+    "Model for managing network interfaces and subinterfaces.  This
+    module also defines convenience types / groupings for other
+    models to create references to interfaces:
+
+      base-interface-ref (type) -  reference to a base interface
+      interface-ref (grouping) -  container for reference to a
+        interface + subinterface
+      interface-ref-state (grouping) - container for read-only
+        (opstate) reference to interface + subinterface
+
+    This model reuses data items defined in the IETF YANG model for
+    interfaces described by RFC 7223 with an alternate structure
+    (particularly for operational state data) and with
+    additional configuration items.
+
+    Portions of this code were derived from IETF RFC 7223.
+    Please reproduce this note if possible.
+
+    IETF code is subject to the following copyright and license:
+    Copyright (c) IETF Trust and the persons identified as authors of
+    the code.
+    All rights reserved.
+
+    Redistribution and use in source and binary forms, with or without
+    modification, is permitted pursuant to, and subject to the license
+    terms contained in, the Simplified BSD License set forth in
+    Section 4.c of the IETF Trust's Legal Provisions Relating
+    to IETF Documents (http://trustee.ietf.org/license-info).";
+
+
+  revision "2022-08-05" {
+    description
+      "Intial Version";
+    reference "1.1.0";
+  }
+
+
+  container sad {
+    description
+      "Configuration of the IPsec Security Association
+      Database (SAD)";
+    reference "Section 4.4.2.1 in RFC 4301.";
+
+    list sad-entry {
+      key "name";
+      ordered-by user;
+      leaf name {
+        type string; // FIXME: should this be a number ?
+        description
+          "SAD entry unique name to identify this
+          entry.";
+      }
+      // TODO: Do we need this ? This should be unq to SA, many policies can have same reqid
+      leaf reqid {
+        type uint64;
+        default 0;
+        description
+          "This value allows to link this
+          IPsec SA with an IPsec policy with
+          the same reqid.";
+      }
+
+      container ipsec-sa-config {
+        description
+          "This container allows configuring
+          details of an IPsec SA.";
+        // uint32 spi = 2
+        leaf spi {
+          type uint32 { range "0..max"; }
+          mandatory true;
+          description
+            "Security Parameter Index (SPI)'s
+            IPsec SA.";
+        }
+        // bool use_esn = 8;          /* Use extended sequence number */
+        leaf ext-seq-num {
+          type boolean;
+          default true;
+          description
+            "True if this IPsec SA is using
+            extended sequence numbers. True 64
+            bit counter, false 32 bit.";
+        }
+        // This is needed to have an optional starting (E)SN value
+        leaf seq-number-counter {
+          type uint64;
+          default 0;
+          description
+            "A 64-bit counter when this IPsec
+            SA is using Extended Sequence
+            Number or 32-bit counter when it
+            is not. It used to generate the
+            initial Sequence Number field
+            in ESP headers.";
+        }
+        // Needed for config
+        leaf seq-overflow {
+          type boolean;
+          default false;
+          description
+            "The flag indicating whether
+            overflow of the sequence number
+            counter should prevent transmission
+            of additional packets on the IPsec
+            SA (false) and, therefore needs to
+            be rekeyed, or whether rollover is
+            permitted (true). If Authenticated
+            Encryption with Associated Data
+            (AEAD) is used (leaf
+            esp-algorithms/encryption/algorithm-type)
+            this flag MUST BE false.";
+        }
+        // It's only a bool in OPI
+        leaf anti-replay-window {
+          type uint32;
+          default 32;
+          description
+            "A 32-bit counter and a bit-map (or
+            equivalent) used to determine
+            whether an inbound ESP packet is a
+            replay. If set to 0 no anti-replay
+            mechanism is performed.";
+        }
+        container traffic-selector { // TODO: this is not needed ? as it looks like policy
+          uses oc-ipsec:selector-grouping;
+          description
+            "The IPsec SA traffic selector.";
+        }
+        // ESP or AH, maybe it should be called security-protocol-type
+        leaf protocol-parameters {
+          type oc-ipsec:ipsec-protocol-parameters;
+          default esp;
+          description
+            "Security protocol of IPsec SA: Only
+            ESP so far.";
+        }
+        leaf mode {
+          type oc-ipsec:ipsec-mode;
+          default transport;
+          description
+            "Tunnel or transport mode.";
+        }
+        container esp-sa {
+          when "../protocol-parameters = 'esp'";
+          description
+            "In case the IPsec SA is
+            Encapsulation Security Payload
+            (ESP), it is required to specify
+            encryption and integrity
+            algorithms, and key material.";
+
+          container encryption {
+            description
+              "Configuration of encryption or
+                AEAD algorithm for IPsec
+                Encapsulation Security Payload
+                (ESP).";
+            // TODO: Change this to enum
+            leaf encryption-algorithm {
+              type oc-ipsec:encryption-algorithm-type;
+              default 12; //FIXME: why 12 ?
+              description
+                "Configuration of ESP
+                encryption. With AEAD
+                algorithms, the integrity-algorithm
+                leaf is not used.";
+            }
+
+            leaf key {
+              /* TODO:(remove default-deny-all) This is from this RFC https://www.rfc-editor.org/rfc/rfc834 
+              It can be ignored as this config is not tied to the server allowing config via ACM rule*/
+              //nacm:default-deny-all; 
+              type oc-yang:hex-string;
+                description
+                  "ESP encryption key value.
+                  If this leaf is not defined
+                  the key is not defined
+                  (e.g. encryption is NULL).
+                  The key length is
+                  determined by the
+                  length of the key set in
+                  this leaf. By default is
+                  128 bits.";
+            }
+            leaf iv { //TODO: is this needed, check RFC once ?
+              //nacm:default-deny-all;
+              type oc-yang:hex-string;
+              description
+                "ESP encryption IV value. If
+                this leaf is not defined the
+                IV is not defined (e.g.
+                encryption is NULL)";
+            }
+          }
+
+          container integrity {
+            description
+              "Configuration of integrity for
+              IPsec Encapsulation Security
+              Payload (ESP). This container
+              allows to configure integrity
+              algorithm when no AEAD
+              algorithms are used, and
+              integrity is required.";
+            leaf integrity-algorithm {
+              type oc-ipsec:integrity-algorithm-type;
+              default 12;  //FIXME: why 12 ?
+              description
+                "Message Authentication Code
+                (MAC) algorithm to provide
+                integrity in ESP
+                (default
+                AUTH_HMAC_SHA2_256_128).
+                With AEAD algorithms,
+                the integrity leaf is not
+                used.";
+            }
+            leaf key {
+              //nacm:default-deny-all;
+              type oc-yang:hex-string;
+              description
+                "ESP integrity key value.
+                If this leaf is not defined
+                the key is not defined (e.g.
+                AEAD algorithm is chosen and
+                integrity algorithm is not
+                required). The key length is
+                determined by the length of
+                the key configured.";
+            }
+          }
+        } /*container esp-sa*/
+
+        container sa-lifetime-hard {
+          description
+            "IPsec SA hard lifetime. The action
+            associated is terminate and
+            hold.";
+          uses oc-ipsec:lifetime;
+        }
+        container sa-lifetime-soft {
+          description
+            "IPsec SA soft lifetime.";
+          uses oc-ipsec:lifetime;
+          leaf action {
+            type oc-ipsec:lifetime-action;
+            description
+              "Action lifetime:
+              terminate-clear,
+              terminate-hold or replace.";
+          }
+        }
+        container tunnel {
+          when "../mode = 'tunnel'";
+          uses oc-ipsec:tunnel-grouping;
+          description
+            "Endpoints of the IPsec tunnel.";
+        }
+        // TODO: check which fields are MUST and add YANG keyword for them 
+        container encapsulation-type {
+          uses oc-ipsec:encap;
+          description
+            "This container carries
+            configuration information about
+            the source and destination ports
+            which will be used for ESP
+            encapsulation that ESP packets the
+            type of encapsulation when NAT
+            traversal is in place.";
+        }
+      } /*ipsec-sa-config*/
+
+      container ipsec-sa-state {
+        config false;
+        description
+          "Container describing IPsec SA state
+          data.";
+        container sa-lifetime-current {
+          uses oc-ipsec:lifetime;
+          description
+            "SAD lifetime current.";
+        }
+        container replay-stats {
+          description
+            "State data about the anti-replay
+            window.";
+          leaf replay-window {
+            type uint64;
+            description
+              "Current state of the replay
+              window.";
+          }
+          leaf packet-dropped {
+            type uint64;
+            description
+              "Packets detected out of the
+              replay window and dropped
+              because they are replay
+              packets.";
+          }
+          leaf failed {
+            type uint32;
+            description
+              "Number of packets detected out
+              of the replay window.";
+          }
+          leaf seq-number-counter {
+            type uint64;
+            description
+              "A 64-bit counter when this
+              IPsec SA is using Extended
+              Sequence Number or 32-bit
+              counter when it is not.
+              Current value of sequence
+              number.";
+          }
+        } /* container replay-stats*/
+      } /*ipsec-sa-state*/
+
+      description
+        "List of SAD entries that conforms the SAD.";
+    } /*list sad-entry*/
+  } /*container sad*/
+
+  container spd {
+    description
+      "Configuration of the Security Policy Database
+      (SPD.)";
+    reference "Section 4.4.1.2 in RFC 4301.";
+
+    list spd-entry {
+      key "name";
+      /*ordered-by user;*/
+      leaf name {
+        type string;
+        description
+          "SPD entry unique name to identify this
+          entry.";
+      }
+      leaf direction {
+        type oc-ipsec:ipsec-traffic-direction;
+        mandatory true; //TODO: use this for all
+        description
+          "Inbound traffic or outbound
+            traffic. In the IKE-less case the
+            I2NSF Controller needs to
+            specify the policy direction to be
+            applied in the NSF. In the IKE case
+            this direction does not need to be
+            specified since IKE
+            will determine the direction that
+            IPsec policy will require.";
+      }
+      // FIXME: is this needed; check with Aakash once; see if this can be key as a number
+      leaf reqid {
+        type uint64;
+        default 0;
+        description
+          "This value allows to link this
+          IPsec policy with IPsec SAs with the
+          same reqid. It is only required in
+          the IKE-less model since, in the IKE
+          case this link is handled internally
+          by IKE.";
+      }
+      
+
+      container ipsec-policy-config {
+        description
+          "This container carries the
+          configuration of a IPsec policy.";
+          uses oc-ipsec:ipsec-policy-grouping;
+      }
+      description
+        "The SPD is represented as a list of SPD
+        entries, where each SPD entry represents an
+        IPsec policy.";
+    } /*list spd-entry*/
+  } /*container spd*/
+
+}
